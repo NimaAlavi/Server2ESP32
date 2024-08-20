@@ -4,15 +4,16 @@
 #include <Adafruit_GFX.h>
 #include <Adafruit_SSD1306.h>
 #include <FS.h>
+#include <string.h>
 
 #define WIFI_SSID "Alavi001"
 #define WIFI_PASSWORD "09128171868AB"
 #define SERVER_IP "194.60.230.41"
-#define SERVER_PORT 12345
+#define SERVER_PORT 13579
 
 const uint16_t sampleRate = 16000;  // Sample rate in Hz
-const uint16_t bufferSize = 512;
-const uint16_t totalSampleBuff = 64000;
+const uint16_t bufferSize = 1024;
+const uint16_t totalSampleBuff = 48000;
 uint16_t audioBuffer[bufferSize];
 WiFiClient client;
 
@@ -28,6 +29,25 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
 void LoadingDraw(int Sample);
 uint8_t loadingPosition = 0; // Position of the loading line
 
+struct KeyValuePair {
+  char key[9];
+  int value;
+};
+#define itemNUM 3
+#define placeNUM 2
+KeyValuePair itemID[itemNUM] = {
+  {"00000001", 1}, //Locate to کولر
+  {"00000010", 2}, //Locate to چراغ, لامپ
+  {"00000011", 2}  //Locate to چراغ, لامپ
+};
+KeyValuePair placeID[placeNUM] = {
+  {"00000001", 12}, //Locate اتاق to PIN 12
+  {"00000010", 13}  //Locate آشپزخانه to PIN 13
+};
+#define LED_Room 12
+#define LED_Balcon 13
+
+void LEDCommander(char input[9]);
 void reconnectToServer() {
   while (!client.connect(SERVER_IP, SERVER_PORT)) {
     Serial.println("Attempting to reconnect to server...");
@@ -36,8 +56,30 @@ void reconnectToServer() {
   Serial.println("Reconnected to server");
 }
 
+// Function to find value by key
+int getValueByKey(const KeyValuePair* dict, int size, const char* key) {
+    for (int i = 0; i < size; i++) {
+        if (strcmp(dict[i].key, key) == 0) {
+            return dict[i].value;
+        }
+    }
+    return -1; // Return -1 if key is not found
+}
+void extractSubstr(const char* input, int start, int end, char* output) {
+    int j = 0;
+    for (int i = start; i <= end; i++) {
+        output[j++] = input[i];
+    }
+    output[j] = '\0'; // Null-terminate the string
+}
+
 void setup() {
   Serial.begin(115200);
+  pinMode(LED_Room, OUTPUT);
+  pinMode(LED_Balcon, OUTPUT);
+
+  digitalWrite(LED_Room, 0);
+  digitalWrite(LED_Balcon, 0);
 
   // SSD1306_SWITCHCAPVCC = generate display voltage from 3.3V internally
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { 
@@ -107,7 +149,23 @@ void loop() {
         display.setCursor(0, 0); // Position the cursor at the top-left corner
         display.print("Sent."); // Print the text
         display.display();
-        delay(2000);
+        delay(5000);
+
+        // Wait for response from the server
+        if (client.available()) {
+          String resultText = client.readStringUntil('\n');  // Read the result text sent by the server
+          char resultArray[25];
+          resultText.toCharArray(resultArray, sizeof(resultArray));
+          LEDCommander(resultArray);
+
+          display.clearDisplay();
+          display.setCursor(0, 0);
+          display.print("Result:");
+          display.setCursor(0, 30);
+          display.print(resultText);
+          display.display();
+          delay(5000);  // Keep the result on display for 5 seconds
+        }
       }
 
     } else {
@@ -131,4 +189,30 @@ void LoadingDraw(int position) {
 
   // Display the current drawing
   display.display();
+}
+
+void LEDCommander(char input[25]) {
+    char itemKey[9];
+    char placeKey[9];
+    // Serial.println(input);
+
+    // Extract the relevant parts of the input
+    extractSubstr(input, 16, 23, itemKey);  // Extract characters 16 to 23
+    extractSubstr(input, 8, 15, placeKey);  // Extract characters 8 to 15
+
+    int itemValue = getValueByKey(itemID, itemNUM, itemKey);
+    int placePin = getValueByKey(placeID, placeNUM, placeKey);
+
+    // Serial.print(itemKey);
+    // Serial.print(' ');
+    // Serial.print(placePin);
+    // Serial.print(' ');
+    // Serial.println(input[0]);
+    // Check if the item is a light (value 2)
+    if (itemValue == 2) {
+        // Extract bits from input[0] and input[1] and use them to set the LED state
+        int ledState = (input[0] - '0') | (input[1] - '0');  // Assuming input[0] and input[1] are '0' or '1'
+        digitalWrite(placePin, ledState);
+        // Serial.println(ledState);
+    }
 }

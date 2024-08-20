@@ -1,22 +1,24 @@
 import socket
 import struct
 import numpy as np
-
 from detectionProcess import DetectionProcessTransFormers
+from audioCommandDetection import CommandDetection
+
 s2t = DetectionProcessTransFormers()
+c2d = CommandDetection()
 
 SERVER_IP = '0.0.0.0'
-SERVER_PORT = 12345
-BUFFER_SIZE = 512  # Number of uint16_t samples per chunk
-NUM_BYTES_TO_RECEIVE = BUFFER_SIZE * 2  # Each uint16_t is 2 bytes
-TARGET_SAMPLES = 64000  # Number of samples to accumulate
+SERVER_PORT = 13579
+BUFFER_SIZE = 1024  # Increased buffer size for efficiency
+NUM_BYTES_TO_RECEIVE = BUFFER_SIZE * 2
+TARGET_SAMPLES = 48000
 
 def handle_client_connection(conn):
     try:
-        # List to accumulate audio data
-        accumulated_data = []
+        accumulated_data = np.zeros(TARGET_SAMPLES, dtype=np.uint16)
+        current_position = 0
 
-        while len(accumulated_data) < TARGET_SAMPLES:
+        while current_position < TARGET_SAMPLES:
             data_buffer = bytearray()
             while len(data_buffer) < NUM_BYTES_TO_RECEIVE:
                 packet = conn.recv(NUM_BYTES_TO_RECEIVE - len(data_buffer))
@@ -25,25 +27,21 @@ def handle_client_connection(conn):
                     return  # Exit if the connection is closed
                 data_buffer.extend(packet)
 
-            if len(data_buffer) < NUM_BYTES_TO_RECEIVE:
-                print(f"Received incomplete data: {len(data_buffer)} bytes")
-                break
+            audio_data = np.frombuffer(data_buffer, dtype=np.uint16)
+            remaining_space = TARGET_SAMPLES - current_position
+            chunk_size = min(len(audio_data), remaining_space)
 
-            # Unpack the received bytes into uint16_t values
-            audio_data = struct.unpack(f'{BUFFER_SIZE}H', data_buffer)
-            
-            # Append received data to accumulated_data
-            accumulated_data.extend(audio_data)
-            
-            if len(accumulated_data) >= TARGET_SAMPLES:
-                # Trim to the exact size if we have more data than needed
-                accumulated_data = accumulated_data[:TARGET_SAMPLES]
-                # Convert to a NumPy array
-                audio_array = np.array(accumulated_data, dtype=np.uint16)
-                print(f"Received {len(audio_array)} samples: {audio_array[:10]}...")  # Print first 10 samples as a preview
-                
-                print("Text is: ", s2t.doProcess(audio_array / 2**12))
-                # Optionally, process or save the NumPy array here
+            accumulated_data[current_position:current_position + chunk_size] = audio_data[:chunk_size]
+            current_position += chunk_size
+
+        if current_position >= TARGET_SAMPLES:
+            print(f"Received {current_position} samples.")
+            result_text = s2t.doProcess(accumulated_data / 2**12)
+            DataOutB = c2d.proceedCode(result_text)
+            print("Code Out is: ", DataOutB)
+
+            # Send the result text back to the ESP32
+            conn.sendall(DataOutB.encode('utf-8'))  # Send the text as a UTF-8 encoded string
 
     except Exception as e:
         print(f"An error occurred: {e}")
