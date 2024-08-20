@@ -7,9 +7,9 @@ s2t = DetectionProcessTransFormers()
 
 SERVER_IP = '0.0.0.0'
 SERVER_PORT = 12345
-BUFFER_SIZE = 1024  # Number of uint16_t samples per chunk
+BUFFER_SIZE = 512  # Number of uint16_t samples per chunk
 NUM_BYTES_TO_RECEIVE = BUFFER_SIZE * 2  # Each uint16_t is 2 bytes
-TARGET_SAMPLES = 54000  # Number of samples to accumulate
+TARGET_SAMPLES = 64000  # Number of samples to accumulate
 
 def handle_client_connection(conn):
     try:
