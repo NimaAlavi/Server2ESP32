@@ -2,11 +2,14 @@ import socket
 import struct
 import numpy as np
 
+from detectionProcess import DetectionProcessTransFormers
+s2t = DetectionProcessTransFormers()
+
 SERVER_IP = '0.0.0.0'
 SERVER_PORT = 12345
 BUFFER_SIZE = 1024  # Number of uint16_t samples per chunk
 NUM_BYTES_TO_RECEIVE = BUFFER_SIZE * 2  # Each uint16_t is 2 bytes
-TARGET_SAMPLES = 48000  # Number of samples to accumulate
+TARGET_SAMPLES = 54000  # Number of samples to accumulate
 
 def handle_client_connection(conn):
     try:
@@ -38,6 +41,8 @@ def handle_client_connection(conn):
                 # Convert to a NumPy array
                 audio_array = np.array(accumulated_data, dtype=np.uint16)
                 print(f"Received {len(audio_array)} samples: {audio_array[:10]}...")  # Print first 10 samples as a preview
+                
+                print("Text is: ", s2t.doProcess(audio_array / 2**12))
                 # Optionally, process or save the NumPy array here
 
     except Exception as e:
